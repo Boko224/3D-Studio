@@ -1,0 +1,333 @@
+import React, { useState, useEffect } from 'react';
+import { db } from '../config/firebase';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { Eye, EyeOff, Check, X } from 'lucide-react';
+
+const AdminDashboard = () => {
+  const [orders, setOrders] = useState([]);
+  const [modelRequests, setModelRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState('orders');
+  const [loading, setLoading] = useState(true);
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const ADMIN_PASSWORD = 'admin123'; // ⚠️ Замени със силна парола!
+
+  useEffect(() => {
+    // Check if already authenticated
+    const savedAuth = localStorage.getItem('adminAuth');
+    if (savedAuth) {
+      setIsAuthenticated(true);
+      fetchData();
+    }
+  }, []);
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      localStorage.setItem('adminAuth', 'true');
+      setPassword('');
+      fetchData();
+    } else {
+      alert('Неправилна парола!');
+    }
+  };
+
+  const fetchData = () => {
+    setLoading(true);
+
+    // Fetch orders
+    const ordersRef = collection(db, 'orders');
+    const ordersQuery = query(ordersRef, orderBy('createdAt', 'desc'));
+    
+    const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
+      const ordersData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toLocaleString('bg-BG') || 'N/A'
+      }));
+      setOrders(ordersData);
+    });
+
+    // Fetch model requests
+    const requestsRef = collection(db, 'modelRequests');
+    const requestsQuery = query(requestsRef, orderBy('createdAt', 'desc'));
+    
+    const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
+      const requestsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toLocaleString('bg-BG') || 'N/A'
+      }));
+      setModelRequests(requestsData);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribeOrders();
+      unsubscribeRequests();
+    };
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('adminAuth');
+  };
+
+  // Update order status
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, {
+        orderStatus: newStatus,
+      });
+      console.log('✅ Order status updated to:', newStatus);
+    } catch (error) {
+      console.error('❌ Error updating order status:', error);
+      alert('Грешка при обновяване на статуса');
+    }
+  };
+
+  // Update request status
+  const updateRequestStatus = async (requestId, newStatus) => {
+    try {
+      const requestRef = doc(db, 'modelRequests', requestId);
+      await updateDoc(requestRef, {
+        requestStatus: newStatus,
+      });
+      console.log('✅ Request status updated to:', newStatus);
+    } catch (error) {
+      console.error('❌ Error updating request status:', error);
+      alert('Грешка при обновяване на статуса');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="text-5xl mb-4">🔐</div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Panel</h1>
+            <p className="text-gray-600 mt-2">Въведи парола за достъп</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Парола..."
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-gray-600"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition"
+            >
+              Вход
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-indigo-600">Admin Dashboard</h1>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Изход
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-4 mb-6 border-b">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-6 py-3 font-bold transition ${
+              activeTab === 'orders'
+                ? 'text-indigo-600 border-b-2 border-indigo-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📦 Поръчки ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`px-6 py-3 font-bold transition ${
+              activeTab === 'requests'
+                ? 'text-indigo-600 border-b-2 border-indigo-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📤 Качвания ({modelRequests.length})
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="text-2xl">⏳ Зареждане...</div>
+          </div>
+        ) : (
+          <>
+            {/* Orders Tab */}
+            {activeTab === 'orders' && (
+              <div className="space-y-4">
+                {orders.length === 0 ? (
+                  <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                    Няма поръчки
+                  </div>
+                ) : (
+                  orders.map((order) => (
+                    <div key={order.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <h3 className="font-bold text-lg mb-2">
+                            {order.userName || order.customerInfo?.name}
+                            {order.userId && <span className="text-xs bg-blue-100 text-blue-700 ml-2 px-2 py-1 rounded">👤 Логнат</span>}
+                          </h3>
+                          <p className="text-sm text-gray-600">📧 {order.userEmail || order.customerInfo?.email}</p>
+                          <p className="text-sm text-gray-600">📱 {order.customerInfo?.phone}</p>
+                          <p className="text-sm text-gray-600">📍 {order.customerInfo?.address}, {order.customerInfo?.city}</p>
+                          {order.userId && <p className="text-xs text-gray-500 mt-2 font-mono">ID: {order.userId}</p>}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-indigo-600 mb-2">{order.total?.toFixed(2)} лв.</div>
+                          <p className="text-sm text-gray-600">🚚 {order.shippingMethod?.name}</p>
+                          <p className="text-sm text-gray-600">⏰ {order.createdAt}</p>
+                          
+                          {/* Status with toggle buttons */}
+                          <div className="mt-3 flex gap-2 justify-end">
+                            <button
+                              onClick={() => updateOrderStatus(order.id, 'pending')}
+                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+                                order.orderStatus === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-800 ring-2 ring-yellow-300'
+                                  : 'bg-gray-200 text-gray-600 hover:bg-yellow-100'
+                              }`}
+                            >
+                              ⏳ Очакване
+                            </button>
+                            <button
+                              onClick={() => updateOrderStatus(order.id, 'processed')}
+                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+                                order.orderStatus === 'processed'
+                                  ? 'bg-green-100 text-green-800 ring-2 ring-green-300'
+                                  : 'bg-gray-200 text-gray-600 hover:bg-green-100'
+                              }`}
+                            >
+                              ✅ Обработена
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t pt-4">
+                        <h4 className="font-bold mb-2">📦 Продукти:</h4>
+                        <div className="space-y-2">
+                          {order.items?.map((item, idx) => (
+                            <div key={idx} className="text-sm bg-gray-50 p-3 rounded">
+                              {item.image} <strong>{item.name}</strong> x{item.quantity}
+                              {item.customText && <div className="text-gray-600">Текст: {item.customText}</div>}
+                              <div className="text-gray-600">Цвят: {item.selectedColor} | Материал: {item.material}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Model Requests Tab */}
+            {activeTab === 'requests' && (
+              <div className="space-y-4">
+                {modelRequests.length === 0 ? (
+                  <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+                    Няма качвания
+                  </div>
+                ) : (
+                  modelRequests.map((request) => (
+                    <div key={request.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <h3 className="font-bold text-lg mb-2">{request.customerInfo?.name}</h3>
+                          <p className="text-sm text-gray-600">📧 {request.customerInfo?.email}</p>
+                          <p className="text-sm text-gray-600">📱 {request.customerInfo?.phone}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">⏰ {request.createdAt}</p>
+                          
+                          {/* Status with toggle buttons */}
+                          <div className="mt-3 flex gap-2 justify-end">
+                            <button
+                              onClick={() => updateRequestStatus(request.id, 'pending')}
+                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+                                request.requestStatus === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-800 ring-2 ring-yellow-300'
+                                  : 'bg-gray-200 text-gray-600 hover:bg-yellow-100'
+                              }`}
+                            >
+                              ⏳ Нов
+                            </button>
+                            <button
+                              onClick={() => updateRequestStatus(request.id, 'reviewed')}
+                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+                                request.requestStatus === 'reviewed'
+                                  ? 'bg-green-100 text-green-800 ring-2 ring-green-300'
+                                  : 'bg-gray-200 text-gray-600 hover:bg-green-100'
+                              }`}
+                            >
+                              ✅ Разглеждан
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t pt-4">
+                        <h4 className="font-bold mb-2">📝 Описание:</h4>
+                        <p className="text-gray-700 mb-4">{request.customerInfo?.description}</p>
+
+                        <h4 className="font-bold mb-2">📁 Качени файлове:</h4>
+                        <div className="space-y-2">
+                          {request.files?.map((file, idx) => (
+                            <div key={idx} className="text-sm bg-gray-50 p-3 rounded">
+                              📄 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;
