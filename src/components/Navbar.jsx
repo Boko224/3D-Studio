@@ -1,12 +1,14 @@
 import React from 'react';
-import { ShoppingCart, Menu, X, User } from 'lucide-react';
+import { ShoppingCart, Menu, X, User, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useUser } from '../context/UserContext';
 import { useState } from 'react';
 
 const Navbar = () => {
-  const { cartItems } = useCart();
+  const { cartItems, toggleMiniCart } = useCart();
+  const { wishlistCount } = useWishlist();
   const { user } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const cartCount = cartItems.length;
@@ -51,26 +53,49 @@ const Navbar = () => {
               </Link>
             )}
 
-            <Link to="/cart" className="bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-indigo-700 transition shadow-lg hover:shadow-indigo-500/30 flex items-center gap-2">
+            <Link
+              to="/wishlist"
+              className="relative bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-full hover:border-indigo-300 transition flex items-center gap-2"
+            >
+              <Heart size={18} className="text-indigo-600" />
+              {wishlistCount > 0 && (
+                <span className="bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
+            <button
+              type="button"
+              onClick={toggleMiniCart}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-indigo-700 transition shadow-lg hover:shadow-indigo-500/30 flex items-center gap-2"
+            >
               <ShoppingCart size={20} />
               {cartCount > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
-            </Link>
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center gap-4">
-            <Link to="/cart" className="relative">
+            <Link to="/wishlist" className="relative">
+              <Heart size={22} className="text-indigo-600" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
+            <button type="button" onClick={toggleMiniCart} className="relative">
               <ShoppingCart size={24} className="text-indigo-600" />
               {cartCount > 0 && (
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
-            </Link>
+            </button>
             <button onClick={() => setIsOpen(!isOpen)} className="md:hidden">
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -85,6 +110,9 @@ const Navbar = () => {
             </Link>
             <Link to="/shop" className="block text-gray-700 hover:text-indigo-600 py-2">
               Магазин
+            </Link>
+            <Link to="/wishlist" className="block text-gray-700 hover:text-indigo-600 py-2">
+              Любими
             </Link>
             <Link to="/upload" className="block text-gray-700 hover:text-indigo-600 py-2">
               Качи модел

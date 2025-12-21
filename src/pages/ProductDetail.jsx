@@ -1,20 +1,137 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { PRODUCTS, COLORS, MATERIALS } from '../data/products';
+import { COLORS, MATERIALS } from '../data/products';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import Button from '../components/Button';
-import { Plus, Minus, ShoppingCart } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, Heart } from 'lucide-react';
+import { db } from '../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+
+// Дефолтни опции по категории (за инвентар продукти от Firebase)
+const DEFAULT_OPTIONS = {
+  keychains: {
+    colors: ['Черен', 'Бял', 'Червен', 'Син'],
+    materials: ['PLA', 'PETG'],
+    customizable: true,
+  },
+  figures: {
+    colors: ['Черен', 'Сив', 'Цветен', 'Бял', 'Червен', 'Син', 'Зелен', 'Жълт'],
+    materials: ['PLA'],
+    customizable: false,
+  },
+  parts: {
+    colors: ['Черен', 'Бял', 'Сив', 'Червен', 'Син', 'Зелен'],
+    materials: ['PETG'],
+    customizable: false,
+  },
+  organizers: {
+    colors: ['Черен', 'Бял', 'Син'],
+    materials: ['PLA'],
+    customizable: true,
+  },
+};
 
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
-  const product = PRODUCTS.find((p) => p.id === id);
+  const { addToCart, openMiniCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Зареди продукт от Firebase инвентара
+  useEffect(() => {
+    const inventoryRef = collection(db, 'inventory');
+    const q = query(inventoryRef, where('productId', '==', id));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        const data = doc.data();
+        const category = data.category || 'keychains';
+        const defaults = DEFAULT_OPTIONS[category] || DEFAULT_OPTIONS['keychains'];
+        
+        // Вземи colorStock ако съществува, иначе създай дефолтен
+        const colorStock = data.colorStock || [];
+        const totalStock = colorStock.reduce((sum, cs) => sum + (cs.stock || 0), 0);
+        
+        const productData = {
+          id: data.productId,
+          name: data.productName,
+          basePrice: data.basePrice || 0,
+          category,
+          image: '📦',
+          stock: totalStock,
+          colorStock: colorStock,
+          description: colorStock.length > 0 
+            ? `${data.productName} - Налични цветове: ${colorStock.filter(cs => cs.stock > 0).map(cs => cs.color).join(', ')}`
+            : `${data.productName} - На наличност: ${totalStock} броя`,
+          options: {
+            colors: colorStock.length > 0 ? colorStock.map(cs => cs.color) : defaults.colors,
+            materials: defaults.materials,
+          },
+          customizable: defaults.customizable,
+          firebaseId: doc.id,
+        };
+        setProduct(productData);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [id]);
 
   const [quantity, setQuantity] = useState(1);
   const [customText, setCustomText] = useState('');
-  const [selectedColor, setSelectedColor] = useState(product?.options.colors[0] || '');
+  const [selectedColor, setSelectedColor] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState('PLA');
+  const [availableColors, setAvailableColors] = useState([]);
+
+  // Обновяване на наличните цветове
+  useEffect(() => {
+    if (product?.colorStock && product.colorStock.length > 0) {
+      // Покажи всички цветове, независимо от наличността
+      setAvailableColors(product.colorStock);
+      
+      // Задай първия наличен цвят като избран (или първия изобщо ако няма налични)
+      if (!selectedColor) {
+        const availableColor = product.colorStock.find(cs => cs.stock > 0);
+        if (availableColor) {
+          setSelectedColor(availableColor.color);
+        } else if (product.colorStock.length > 0) {
+          setSelectedColor(product.colorStock[0].color);
+        }
+      }
+    } else if (product?.options?.colors?.length > 0) {
+      // Фолбек за стари продукти без colorStock
+      const defaultColors = product.options.colors.map(color => ({ color, stock: 999 }));
+      setAvailableColors(defaultColors);
+      if (!selectedColor) {
+        setSelectedColor(product.options.colors[0]);
+      }
+    }
+  }, [product]);
+
+  // Вземи наличността за избрания цвят
+  const getStockForColor = (color) => {
+    if (!product?.colorStock) return product?.stock || 999;
+    const colorItem = product.colorStock.find(cs => cs.color === color);
+    return colorItem ? colorItem.stock : 0;
+  };
+
+  const currentColorStock = getStockForColor(selectedColor);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-600">Зареждам продукта...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -31,8 +148,20 @@ const ProductDetail = () => {
 
   const materialPrice = MATERIALS[selectedMaterial] || 0;
   const totalProductPrice = (product.basePrice + materialPrice) * quantity;
+  const isFav = isInWishlist(product?.id);
 
   const handleAddToCart = () => {
+    // Проверка за наличност на избрания цвят
+    if (currentColorStock <= 0) {
+      alert('⚠️ Избраният цвят е изчерпан!');
+      return;
+    }
+    
+    if (quantity > currentColorStock) {
+      alert(`⚠️ Налични са само ${currentColorStock} броя от този цвят!`);
+      return;
+    }
+
     const cartItem = {
       productId: product.id,
       name: product.name,
@@ -44,10 +173,11 @@ const ProductDetail = () => {
       quantity,
       totalPrice: totalProductPrice,
       image: product.image,
+      firebaseId: product.firebaseId, // За обновяване на наличността
     };
 
     addToCart(cartItem);
-    navigate('/cart');
+    openMiniCart();
   };
 
   return (
@@ -98,89 +228,114 @@ const ProductDetail = () => {
               </div>
 
               {/* Customization Options */}
-              {product.customizable && (
+              {(product?.options?.colors?.length > 0 || product?.options?.materials?.length > 0 || product.customizable) && (
                 <div className="space-y-6 mb-8">
-                  {/* Custom Text */}
-                  <div>
-                    <label className="block text-sm font-bold mb-3 text-gray-700">
-                      📝 Персонален текст (макс. 15 символа)
-                    </label>
-                    <input
-                      type="text"
-                      maxLength="15"
-                      value={customText}
-                      onChange={(e) => setCustomText(e.target.value)}
-                      placeholder="Напр. IVAN"
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 text-lg font-semibold"
-                    />
-                    <div className="text-xs text-gray-500 mt-2">
-                      {customText.length} / 15 символа
+                  {/* Custom Text (only when allowed) */}
+                  {product.customizable && (
+                    <div>
+                      <label className="block text-sm font-bold mb-3 text-gray-700">
+                        📝 Персонален текст (макс. 15 символа)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength="15"
+                        value={customText}
+                        onChange={(e) => setCustomText(e.target.value)}
+                        placeholder="Напр. IVAN"
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 text-lg font-semibold"
+                      />
+                      <div className="text-xs text-gray-500 mt-2">
+                        {customText.length} / 15 символа
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Color Selector */}
-                  <div>
-                    <label className="block text-sm font-bold mb-3 text-gray-700">
-                      🎨 Цвят: {selectedColor}
-                    </label>
-                    <div className="flex flex-wrap gap-3">
-                      {product.options.colors.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setSelectedColor(color)}
-                          className={`px-4 py-2 rounded-lg font-medium transition-all border-2 ${
-                            selectedColor === color
-                              ? 'border-indigo-600 bg-indigo-50'
-                              : 'border-gray-300 hover:border-gray-400'
-                          }`}
-                          style={{
-                            backgroundColor: selectedColor === color ? COLORS[color] + '20' : 'transparent',
-                          }}
-                        >
-                          <span
-                            className="inline-block w-4 h-4 rounded mr-2"
-                            style={{
-                              backgroundColor: COLORS[color],
-                              border: '1px solid rgba(0,0,0,0.1)',
-                            }}
-                          ></span>
-                          {color}
-                        </button>
-                      ))}
+                  {/* Color Selector (when colors exist) */}
+                  {availableColors.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-bold mb-3 text-gray-700">
+                        🎨 Цвят: {selectedColor} 
+                        <span className="ml-2 text-sm font-normal text-gray-500">
+                          (налични: {currentColorStock} бр.)
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-3">
+                        {availableColors.map((colorItem) => {
+                          const isAvailable = colorItem.stock > 0;
+                          return (
+                            <button
+                              key={colorItem.color}
+                              onClick={() => isAvailable && setSelectedColor(colorItem.color)}
+                              disabled={!isAvailable}
+                              className={`px-4 py-2 rounded-lg font-medium transition-all border-2 ${
+                                selectedColor === colorItem.color
+                                  ? 'border-indigo-600 bg-indigo-50'
+                                  : isAvailable
+                                  ? 'border-gray-300 hover:border-gray-400'
+                                  : 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
+                              }`}
+                              style={{
+                                backgroundColor: selectedColor === colorItem.color && isAvailable 
+                                  ? COLORS[colorItem.color] + '20' 
+                                  : !isAvailable 
+                                  ? '#f3f4f6'
+                                  : 'transparent',
+                              }}
+                            >
+                              <span
+                                className="inline-block w-4 h-4 rounded mr-2"
+                                style={{
+                                  backgroundColor: COLORS[colorItem.color] || '#ccc',
+                                  border: '1px solid rgba(0,0,0,0.1)',
+                                }}
+                              ></span>
+                              {colorItem.color}
+                              <span className="ml-2 text-xs">
+                                ({colorItem.stock} бр.)
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {availableColors.length === 0 && (
+                        <p className="text-red-600 text-sm mt-2">❌ Всички цветове са изчерпани</p>
+                      )}
                     </div>
-                  </div>
+                  )}
 
-                  {/* Material Selector */}
-                  <div>
-                    <label className="block text-sm font-bold mb-3 text-gray-700">
-                      ⚡ Материал
-                    </label>
-                    <div className="flex gap-3">
-                      {product.options.materials.map((mat) => (
-                        <button
-                          key={mat}
-                          onClick={() => setSelectedMaterial(mat)}
-                          className={`px-6 py-3 rounded-lg font-bold transition-all border-2 ${
-                            selectedMaterial === mat
-                              ? 'border-indigo-600 bg-indigo-600 text-white'
-                              : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                          }`}
-                        >
-                          {mat}
-                          {MATERIALS[mat] > 0 && (
-                            <span className="text-sm ml-2">
-                              (+{MATERIALS[mat].toFixed(2)} лв.)
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                  {/* Material Selector (when materials exist) */}
+                  {product?.options?.materials?.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-bold mb-3 text-gray-700">
+                        ⚡ Материал
+                      </label>
+                      <div className="flex gap-3">
+                        {product.options.materials.map((mat) => (
+                          <button
+                            key={mat}
+                            onClick={() => setSelectedMaterial(mat)}
+                            className={`px-6 py-3 rounded-lg font-bold transition-all border-2 ${
+                              selectedMaterial === mat
+                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                            }`}
+                          >
+                            {mat}
+                            {MATERIALS[mat] > 0 && (
+                              <span className="text-sm ml-2">
+                                (+{MATERIALS[mat].toFixed(2)} лв.)
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
               {/* Quantity Selector */}
-              <div className="mb-8">
+              <div className="mb-4">
                 <label className="block text-sm font-bold mb-3 text-gray-700">
                   📦 Количество
                 </label>
@@ -193,12 +348,32 @@ const ProductDetail = () => {
                   </button>
                   <span className="text-2xl font-bold w-16 text-center">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(quantity + 1)}
-                    className="p-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    onClick={() => setQuantity(Math.min(currentColorStock, quantity + 1))}
+                    disabled={quantity >= currentColorStock}
+                    className="p-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus size={20} />
                   </button>
                 </div>
+                {currentColorStock < 10 && currentColorStock > 0 && (
+                  <p className="text-orange-600 text-sm mt-2">
+                    ⚠️ Остават само {currentColorStock} броя!
+                  </p>
+                )}
+              </div>
+
+              {/* Wishlist */}
+              <div className="mb-8">
+                <button
+                  type="button"
+                  onClick={() => toggleWishlist(product)}
+                  className={`w-full md:w-auto px-4 py-3 rounded-lg border-2 flex items-center justify-center gap-2 font-semibold transition ${
+                    isFav ? 'border-red-500 text-red-600 bg-red-50' : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Heart size={20} className={isFav ? 'text-red-500 fill-red-500' : 'text-gray-600'} />
+                  {isFav ? 'В любими' : 'Добави в любими'}
+                </button>
               </div>
 
               {/* Total Price */}
@@ -214,10 +389,13 @@ const ProductDetail = () => {
               {/* Add to Cart Button */}
               <Button
                 onClick={handleAddToCart}
-                className="w-full text-lg py-4 flex items-center justify-center gap-2"
+                disabled={currentColorStock <= 0 || availableColors.length === 0}
+                className="w-full text-lg py-4 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <ShoppingCart size={24} />
-                Добави в количката
+                {currentColorStock <= 0 || availableColors.length === 0 
+                  ? 'Изчерпано количество' 
+                  : 'Добави в количката'}
               </Button>
             </div>
           </div>

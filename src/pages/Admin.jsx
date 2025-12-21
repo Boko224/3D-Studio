@@ -2,15 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../config/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Eye, EyeOff, Check, X } from 'lucide-react';
+import OrdersTable from '../components/OrdersTable';
+import SalesStatistics from '../components/SalesStatistics';
+import InventoryManagement from '../components/InventoryManagement';
+import LowStockAlert from '../components/LowStockAlert';
 
 const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [modelRequests, setModelRequests] = useState([]);
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState('statistics');
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState(null);
 
   const ADMIN_PASSWORD = 'admin123'; // ⚠️ Замени със силна парола!
 
@@ -104,6 +109,12 @@ const AdminDashboard = () => {
     }
   };
 
+  // Handle restock from low stock alert
+  const handleRestock = (productId) => {
+    setSelectedProductId(productId);
+    setActiveTab('inventory');
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center p-4">
@@ -161,10 +172,20 @@ const AdminDashboard = () => {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex gap-4 mb-6 border-b">
+        <div className="flex gap-4 mb-6 border-b overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('statistics')}
+            className={`px-6 py-3 font-bold transition whitespace-nowrap ${
+              activeTab === 'statistics'
+                ? 'text-indigo-600 border-b-2 border-indigo-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📊 Статистика
+          </button>
           <button
             onClick={() => setActiveTab('orders')}
-            className={`px-6 py-3 font-bold transition ${
+            className={`px-6 py-3 font-bold transition whitespace-nowrap ${
               activeTab === 'orders'
                 ? 'text-indigo-600 border-b-2 border-indigo-600'
                 : 'text-gray-600 hover:text-gray-900'
@@ -173,8 +194,18 @@ const AdminDashboard = () => {
             📦 Поръчки ({orders.length})
           </button>
           <button
+            onClick={() => setActiveTab('inventory')}
+            className={`px-6 py-3 font-bold transition whitespace-nowrap ${
+              activeTab === 'inventory'
+                ? 'text-indigo-600 border-b-2 border-indigo-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📦 Инвентар
+          </button>
+          <button
             onClick={() => setActiveTab('requests')}
-            className={`px-6 py-3 font-bold transition ${
+            className={`px-6 py-3 font-bold transition whitespace-nowrap ${
               activeTab === 'requests'
                 ? 'text-indigo-600 border-b-2 border-indigo-600'
                 : 'text-gray-600 hover:text-gray-900'
@@ -184,79 +215,33 @@ const AdminDashboard = () => {
           </button>
         </div>
 
+        {/* Low Stock Alert Banner */}
+        <LowStockAlert onRestock={handleRestock} />
+
         {loading ? (
           <div className="text-center py-12">
             <div className="text-2xl">⏳ Зареждане...</div>
           </div>
         ) : (
           <>
+            {/* Statistics Tab */}
+            {activeTab === 'statistics' && (
+              <div>
+                <SalesStatistics orders={orders} />
+              </div>
+            )}
+
             {/* Orders Tab */}
             {activeTab === 'orders' && (
-              <div className="space-y-4">
-                {orders.length === 0 ? (
-                  <div className="bg-white rounded-lg p-8 text-center text-gray-500">
-                    Няма поръчки
-                  </div>
-                ) : (
-                  orders.map((order) => (
-                    <div key={order.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <h3 className="font-bold text-lg mb-2">
-                            {order.userName || order.customerInfo?.name}
-                            {order.userId && <span className="text-xs bg-blue-100 text-blue-700 ml-2 px-2 py-1 rounded">👤 Логнат</span>}
-                          </h3>
-                          <p className="text-sm text-gray-600">📧 {order.userEmail || order.customerInfo?.email}</p>
-                          <p className="text-sm text-gray-600">📱 {order.customerInfo?.phone}</p>
-                          <p className="text-sm text-gray-600">📍 {order.customerInfo?.address}, {order.customerInfo?.city}</p>
-                          {order.userId && <p className="text-xs text-gray-500 mt-2 font-mono">ID: {order.userId}</p>}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-indigo-600 mb-2">{order.total?.toFixed(2)} лв.</div>
-                          <p className="text-sm text-gray-600">🚚 {order.shippingMethod?.name}</p>
-                          <p className="text-sm text-gray-600">⏰ {order.createdAt}</p>
-                          
-                          {/* Status with toggle buttons */}
-                          <div className="mt-3 flex gap-2 justify-end">
-                            <button
-                              onClick={() => updateOrderStatus(order.id, 'pending')}
-                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
-                                order.orderStatus === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-800 ring-2 ring-yellow-300'
-                                  : 'bg-gray-200 text-gray-600 hover:bg-yellow-100'
-                              }`}
-                            >
-                              ⏳ Очакване
-                            </button>
-                            <button
-                              onClick={() => updateOrderStatus(order.id, 'processed')}
-                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
-                                order.orderStatus === 'processed'
-                                  ? 'bg-green-100 text-green-800 ring-2 ring-green-300'
-                                  : 'bg-gray-200 text-gray-600 hover:bg-green-100'
-                              }`}
-                            >
-                              ✅ Обработена
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+              <div>
+                <OrdersTable orders={orders} onStatusUpdate={updateOrderStatus} />
+              </div>
+            )}
 
-                      <div className="border-t pt-4">
-                        <h4 className="font-bold mb-2">📦 Продукти:</h4>
-                        <div className="space-y-2">
-                          {order.items?.map((item, idx) => (
-                            <div key={idx} className="text-sm bg-gray-50 p-3 rounded">
-                              {item.image} <strong>{item.name}</strong> x{item.quantity}
-                              {item.customText && <div className="text-gray-600">Текст: {item.customText}</div>}
-                              <div className="text-gray-600">Цвят: {item.selectedColor} | Материал: {item.material}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+            {/* Inventory Tab */}
+            {activeTab === 'inventory' && (
+              <div>
+                <InventoryManagement selectedProductId={selectedProductId} />
               </div>
             )}
 

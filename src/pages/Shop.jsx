@@ -1,21 +1,68 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
 import Button from '../components/Button';
-import { PRODUCTS, CATEGORIES } from '../data/products';
+import { CATEGORIES } from '../data/products';
 import { Search } from 'lucide-react';
+import { db } from '../config/firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 const Shop = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Зареди продукти от Firebase инвентара
+  useEffect(() => {
+    const inventoryRef = collection(db, 'inventory');
+    const q = query(inventoryRef, orderBy('productName', 'asc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const inventoryProducts = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          const colorStock = data.colorStock || [];
+          
+          // Изчисли общата наличност от всички цветове
+          const totalStock = colorStock.reduce((sum, cs) => sum + (cs.stock || 0), 0);
+          const availableColors = colorStock.filter(cs => cs.stock > 0);
+          const outOfStockColors = colorStock.filter(cs => cs.stock === 0);
+          
+          return {
+            id: data.productId,
+            name: data.productName,
+            basePrice: data.basePrice || 0,
+            category: data.category || 'all',
+            image: '📦',
+            stock: totalStock,
+            colorStock: colorStock,
+            description: colorStock.length > 0 
+              ? `${data.productName} - ${availableColors.length > 0 ? `Налични: ${availableColors.map(cs => cs.color).join(', ')}` : 'Всички цветове изчерпани'}${outOfStockColors.length > 0 ? ` | Изчерпани: ${outOfStockColors.map(cs => cs.color).join(', ')}` : ''}`
+              : `${data.productName} - ${totalStock > 0 ? `На наличност: ${totalStock} броя` : 'Изчерпано'}`,
+            options: {
+              colors: colorStock.map(cs => cs.color),
+              materials: [],
+            },
+            customizable: false,
+            firebaseId: doc.id,
+          };
+        }); // Показваме всички продукти, независимо от наличността
+      
+      setProducts(inventoryProducts);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((product) => {
+    return products.filter((product) => {
       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.description.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchTerm]);
+  }, [products, selectedCategory, searchTerm]);
 
   return (
     <div className="w-full">
@@ -67,7 +114,12 @@ const Shop = () => {
       {/* Products Grid */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4">
-          {filteredProducts.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-16">
+              <div className="text-4xl mb-4">⏳</div>
+              <p className="text-gray-600">Зареждам продукти...</p>
+            </div>
+          ) : filteredProducts.length > 0 ? (
             <div>
               <div className="mb-8 text-gray-600">
                 Намерени {filteredProducts.length} продукта

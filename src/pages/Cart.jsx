@@ -7,7 +7,7 @@ import { Trash2, Plus, Minus } from 'lucide-react';
 import Input from '../components/Input';
 import { SHIPPING_METHODS } from '../data/products';
 import { db } from '../config/firebase';
-import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc, getDocs, query, where, runTransaction } from 'firebase/firestore';
 import { sendOrderConfirmationEmail, sendAdminNotificationEmail } from '../services/emailService';
 
 const Cart = () => {
@@ -147,6 +147,48 @@ const Cart = () => {
       } catch (emailError) {
         console.error('⚠️ Email error (non-blocking):', emailError);
         // Не спираме процеса при грешка с имейлите
+      }
+
+      // Декрементирай наличност в инвентара
+      try {
+        for (const item of cartItems) {
+          const invQ = query(collection(db, 'inventory'), where('productId', '==', item.productId));
+          const invSnap = await getDocs(invQ);
+          if (!invSnap.empty) {
+            const invRef = invSnap.docs[0].ref;
+            await runTransaction(db, async (tx) => {
+              const invDoc = await tx.get(invRef);
+              if (!invDoc.exists()) return;
+              
+              const invData = invDoc.data();
+              const currentStock = invData.stock || 0;
+              const colorStock = invData.colorStock || [];
+              
+              // Намери и обнови количеството за избрания цвят
+              const updatedColorStock = colorStock.map(cs => {
+                if (cs.color === item.selectedColor) {
+                  return {
+                    ...cs,
+                    stock: Math.max(0, cs.stock - (item.quantity || 1))
+                  };
+                }
+                return cs;
+              }); // Запазваме всички цветове, включително тези с 0 stock
+              
+              // Изчисли новата обща наличност
+              const newTotalStock = updatedColorStock.reduce((sum, cs) => sum + cs.stock, 0);
+              
+              tx.update(invRef, { 
+                stock: newTotalStock,
+                colorStock: updatedColorStock,
+                updatedAt: new Date() 
+              });
+            });
+          }
+        }
+        console.log('📦 Inventory updated after order');
+      } catch (invErr) {
+        console.error('❌ Inventory update failed:', invErr);
       }
 
       setOrderPlaced(true);
