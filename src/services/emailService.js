@@ -32,6 +32,9 @@ export const sendOrderConfirmationEmail = async (orderData) => {
       price: (item.finalPrice ?? item.totalPrice ?? item.price ?? 0).toFixed(2),
     }));
 
+    const shippingMethodName = orderData.shipping?.method?.name || orderData.shippingMethod?.name || 'Не е посочен';
+    const shippingMethodPrice = (orderData.shipping?.price ?? orderData.shippingMethod?.price ?? 0);
+
     const templateParams = {
       // Основни (нашите документационни променливи)
       to_email: orderData.userEmail,
@@ -48,11 +51,11 @@ export const sendOrderConfirmationEmail = async (orderData) => {
       orders: itemsForTemplate,
       // За шаблони които използват {{price}} като обща сума
       price: orderData.total.toFixed(2),
-      shipping_method: orderData.shippingMethod?.name || 'Не е посочен',
-      shipping_price: `${orderData.shippingMethod?.price || 0} лв.`,
+      shipping_method: shippingMethodName,
+      shipping_price: `${shippingMethodPrice} лв.`,
       // Обект за dot-нотация: {{cost.shipping}} и {{cost.tax}}
       cost: {
-        shipping: (orderData.shippingMethod?.price || 0).toFixed(2),
+        shipping: Number(shippingMethodPrice || 0).toFixed(2),
         tax: (orderData.tax ?? 0).toFixed(2),
         total: (((orderData.total ?? 0) + (orderData.tax ?? 0))).toFixed(2),
       },
@@ -96,6 +99,9 @@ export const sendAdminNotificationEmail = async (orderData) => {
       return { success: true, demo: true };
     }
 
+    const shippingMethodName2 = orderData.shipping?.method?.name || orderData.shippingMethod?.name || 'Не е посочен';
+    const shippingMethodPrice2 = (orderData.shipping?.price ?? orderData.shippingMethod?.price ?? 0);
+
     const templateParams = {
       to_email: 'admin@3dprintstudio.bg', // Замени с admin email
       subject: `Нова поръчка #${orderData.orderId}`,
@@ -113,11 +119,13 @@ export const sendAdminNotificationEmail = async (orderData) => {
         total_price: `${orderData.total.toFixed(2)} лв.`,
         price: orderData.total.toFixed(2),
         cost: {
-          shipping: (orderData.shippingMethod?.price || 0).toFixed(2),
+          shipping: Number(shippingMethodPrice2 || 0).toFixed(2),
           tax: (orderData.tax ?? 0).toFixed(2),
           total: (((orderData.total ?? 0) + (orderData.tax ?? 0))).toFixed(2),
         },
       shipping_address: `${orderData.customerInfo.address}, ${orderData.customerInfo.city}`,
+      shipping_method: shippingMethodName2,
+      shipping_price: `${shippingMethodPrice2} лв.`,
     };
 
     const response = await emailjs.send(

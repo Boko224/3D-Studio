@@ -192,14 +192,16 @@ const OrdersTable = ({ orders, onStatusUpdate }) => {
                           <div>
                             <h4 className="font-bold text-gray-800 mb-2">🛒 Продукти:</h4>
                             <div className="text-sm text-gray-700 space-y-2">
-                              {order.cartItems && order.cartItems.length > 0 ? (
-                                order.cartItems.map((item, idx) => (
+                              {(order.items || order.cartItems) && (order.items || order.cartItems).length > 0 ? (
+                                (order.items || order.cartItems).map((item, idx) => (
                                   <div key={idx} className="bg-white p-2 rounded border border-gray-200">
                                     <p><strong>{item.name}</strong></p>
                                     <p className="text-xs text-gray-500">
                                       Кол: {item.quantity} x {(item.basePrice || 0).toFixed(2)} лв. = {(item.totalPrice || 0).toFixed(2)} лв.
                                     </p>
-                                    {item.color && <p className="text-xs">🎨 Цвят: {item.color}</p>}
+                                    {(item.selectedColor || item.color) && (
+                                      <p className="text-xs">🎨 Цвят: {item.selectedColor || item.color}</p>
+                                    )}
                                     {item.material && <p className="text-xs">📦 Материал: {item.material}</p>}
                                   </div>
                                 ))

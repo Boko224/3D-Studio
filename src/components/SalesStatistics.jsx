@@ -13,6 +13,7 @@ const SalesStatistics = ({ orders }) => {
         pendingOrders: 0,
         cancelledOrders: 0,
         topProducts: [],
+        salesByColor: [],
         revenueByStatus: {},
       };
     }
@@ -26,26 +27,39 @@ const SalesStatistics = ({ orders }) => {
 
     // Събиране на популярни продукти
     const productMap = {};
+    const colorMap = {};
     orders.forEach(order => {
-      if (order.cartItems) {
-        order.cartItems.forEach(item => {
-          if (!productMap[item.id]) {
-            productMap[item.id] = {
-              name: item.name,
-              quantity: 0,
-              revenue: 0,
-              image: item.image,
-            };
-          }
-          productMap[item.id].quantity += item.quantity || 1;
-          productMap[item.id].revenue += item.totalPrice || 0;
-        });
-      }
+      const items = order.items || order.cartItems || [];
+      items.forEach(item => {
+        const pid = item.productId || item.id || item.name;
+        if (!productMap[pid]) {
+          productMap[pid] = {
+            name: item.name,
+            quantity: 0,
+            revenue: 0,
+            image: item.image,
+          };
+        }
+        const qty = item.quantity || 1;
+        const lineTotal = item.totalPrice || (((item.basePrice || 0) + (item.materialPrice || 0)) * qty);
+        productMap[pid].quantity += qty;
+        productMap[pid].revenue += lineTotal;
+
+        const color = item.selectedColor || item.color || 'Неопределен';
+        if (!colorMap[color]) {
+          colorMap[color] = { color, quantity: 0, revenue: 0 };
+        }
+        colorMap[color].quantity += qty;
+        colorMap[color].revenue += lineTotal;
+      });
     });
 
     const topProducts = Object.values(productMap)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
+
+    const salesByColor = Object.values(colorMap)
+      .sort((a, b) => b.quantity - a.quantity);
 
     // Приход по статус
     const revenueByStatus = {};
@@ -65,6 +79,7 @@ const SalesStatistics = ({ orders }) => {
       pendingOrders,
       cancelledOrders,
       topProducts,
+      salesByColor,
       revenueByStatus,
     };
   }, [orders]);
@@ -225,6 +240,32 @@ const SalesStatistics = ({ orders }) => {
           </div>
         ) : (
           <p className="text-gray-600 text-center py-8">Нема продадени продукти</p>
+        )}
+      </div>
+
+      {/* Sales by Colors */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">🎨 Продажби по цветове</h3>
+        {stats.salesByColor.length > 0 ? (
+          <div className="space-y-3">
+            {stats.salesByColor.map((entry) => (
+              <div key={entry.color} className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-5 h-5 rounded border border-gray-300" style={{backgroundColor: '#fff'}}></span>
+                  <div>
+                    <p className="font-semibold text-gray-800">{entry.color}</p>
+                    <p className="text-xs text-gray-600">{entry.quantity} бр.</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-gray-900">{entry.revenue.toFixed(2)} лв.</p>
+                  <p className="text-xs text-gray-600">{((entry.revenue / (stats.totalRevenue || 1)) * 100).toFixed(1)}% от приходите</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-600 text-center py-8">Нема данни за цветове</p>
         )}
       </div>
     </div>

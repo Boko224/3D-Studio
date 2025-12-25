@@ -9,6 +9,7 @@ import { SHIPPING_METHODS } from '../data/products';
 import { db } from '../config/firebase';
 import { collection, addDoc, serverTimestamp, doc, getDoc, getDocs, query, where, runTransaction } from 'firebase/firestore';
 import { sendOrderConfirmationEmail, sendAdminNotificationEmail } from '../services/emailService';
+import { calculateShipping, getCartTotalWeightGrams } from '../services/shippingService';
 
 const Cart = () => {
   const { cartItems, removeFromCart, updateQuantity, getTotalPrice, clearCart } = useCart();
@@ -69,8 +70,16 @@ const Cart = () => {
     loadUserData();
   }, [user]);
 
-  const shippingPrice = SHIPPING_METHODS.find((m) => m.id === shippingMethod)?.price || 0;
   const subtotal = getTotalPrice();
+  const [shippingDetails, setShippingDetails] = useState({ price: 0, eta: '', breakdown: {} });
+
+  useEffect(() => {
+    const methodId = shippingMethod;
+    const details = calculateShipping({ methodId, cartItems, city: formData.city, subtotal });
+    setShippingDetails(details);
+  }, [shippingMethod, cartItems, formData.city, subtotal]);
+
+  const shippingPrice = shippingDetails.price || 0;
   const total = subtotal + shippingPrice;
 
   const handleFormChange = (e) => {
@@ -99,7 +108,12 @@ const Cart = () => {
       console.log('🟠 Creating order details...');
       const orderDetails = {
         items: cartItems,
-        shippingMethod: SHIPPING_METHODS.find((m) => m.id === shippingMethod),
+        shipping: {
+          method: SHIPPING_METHODS.find((m) => m.id === shippingMethod),
+          price: shippingPrice,
+          eta: shippingDetails.eta,
+          breakdown: shippingDetails.breakdown,
+        },
         total,
         customerInfo: formData,
         orderStatus: 'pending',
@@ -189,6 +203,24 @@ const Cart = () => {
         console.log('📦 Inventory updated after order');
       } catch (invErr) {
         console.error('❌ Inventory update failed:', invErr);
+      }
+
+      // Обнови последен адрес/град в профила
+      try {
+        if (user?.uid) {
+          const userDocRef = doc(db, 'userProfiles', user.uid);
+          await addDoc(collection(db, 'userProfiles_updates'), {
+            uid: user.uid,
+            address: formData.address,
+            city: formData.city,
+            updatedAt: serverTimestamp(),
+          });
+          // Note: using a separate collection for updates; optional direct update if profile exists
+          // If you prefer direct update:
+          // await updateDoc(userDocRef, { address: formData.address, city: formData.city, updatedAt: serverTimestamp() });
+        }
+      } catch (profileErr) {
+        console.warn('⚠️ Failed to persist address/city (non-blocking):', profileErr);
       }
 
       setOrderPlaced(true);
@@ -378,12 +410,17 @@ const Cart = () => {
                             />
                             <div className="ml-3 flex-grow">
                               <div className="font-semibold text-gray-900">{method.name}</div>
-                              <div className="text-sm text-gray-600">
-                                {method.price === 0 ? 'Безплатно' : `${method.price.toFixed(2)} лв.`}
-                              </div>
+                              {shippingMethod === method.id && (
+                                <div className="text-sm text-gray-600">
+                                  Цена: {shippingPrice.toFixed(2)} лв. · ETA: {shippingDetails.eta || '—'}
+                                </div>
+                              )}
                             </div>
                           </label>
                         ))}
+                      </div>
+                      <div className="mt-3 text-xs text-gray-500">
+                        Тегло на поръчката: {getCartTotalWeightGrams(cartItems)} г.
                       </div>
                     </div>
 
@@ -398,6 +435,12 @@ const Cart = () => {
                           <span className="text-gray-700">Доставка:</span>
                           <span className="font-semibold text-indigo-600">{shippingPrice.toFixed(2)} лв.</span>
                         </div>
+                        {shippingDetails?.eta && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-700">Време за доставка (ETA):</span>
+                            <span className="font-semibold">{shippingDetails.eta}</span>
+                          </div>
+                        )}
                         <div className="border-t pt-3 flex justify-between text-lg font-bold">
                           <span>Общо:</span>
                           <span className="text-indigo-600">{total.toFixed(2)} лв.</span>

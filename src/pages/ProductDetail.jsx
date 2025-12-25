@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { COLORS, MATERIALS } from '../data/products';
+import { applyPromotion } from '../services/promotionService';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import Button from '../components/Button';
@@ -60,10 +61,16 @@ const ProductDetail = () => {
           id: data.productId,
           name: data.productName,
           basePrice: data.basePrice || 0,
+          weightGrams: data.weightGrams || null,
           category,
           image: '📦',
           stock: totalStock,
           colorStock: colorStock,
+          promoActive: data.promoActive || false,
+          promoType: data.promoType || 'percent',
+          promoValue: data.promoValue ?? 0,
+          promoStart: data.promoStart || '',
+          promoEnd: data.promoEnd || '',
           description: colorStock.length > 0 
             ? `${data.productName} - Налични цветове: ${colorStock.filter(cs => cs.stock > 0).map(cs => cs.color).join(', ')}`
             : `${data.productName} - На наличност: ${totalStock} броя`,
@@ -147,7 +154,15 @@ const ProductDetail = () => {
   }
 
   const materialPrice = MATERIALS[selectedMaterial] || 0;
-  const totalProductPrice = (product.basePrice + materialPrice) * quantity;
+  const promo = {
+    promoActive: product?.promoActive,
+    promoType: product?.promoType,
+    promoValue: product?.promoValue,
+    promoStart: product?.promoStart,
+    promoEnd: product?.promoEnd,
+  };
+  const effectiveBasePrice = applyPromotion(product?.basePrice || 0, promo);
+  const totalProductPrice = (effectiveBasePrice + materialPrice) * quantity;
   const isFav = isInWishlist(product?.id);
 
   const handleAddToCart = () => {
@@ -166,11 +181,14 @@ const ProductDetail = () => {
       productId: product.id,
       name: product.name,
       basePrice: product.basePrice,
+      weightGrams: product.weightGrams,
+      category: product.category,
       selectedColor,
       customText,
       material: selectedMaterial,
       materialPrice,
       quantity,
+      unitPrice: effectiveBasePrice + materialPrice,
       totalPrice: totalProductPrice,
       image: product.image,
       firebaseId: product.firebaseId, // За обновяване на наличността
@@ -217,9 +235,23 @@ const ProductDetail = () => {
               {/* Price */}
               <div className="mb-8 p-6 bg-indigo-50 rounded-xl border border-indigo-200">
                 <div className="text-sm text-gray-600 mb-2">Базова цена</div>
-                <div className="text-3xl font-bold text-indigo-600 mb-4">
-                  {product.basePrice.toFixed(2)} лв.
-                </div>
+                {effectiveBasePrice < (product.basePrice || 0) ? (
+                  <div className="mb-2">
+                    <span className="text-xl font-bold text-gray-500 line-through mr-2">
+                      {(product.basePrice || 0).toFixed(2)} лв.
+                    </span>
+                    <span className="text-3xl font-bold text-indigo-600">
+                      {effectiveBasePrice.toFixed(2)} лв.
+                    </span>
+                    <span className="ml-3 text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">
+                      Промоция
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-3xl font-bold text-indigo-600 mb-4">
+                    {(product.basePrice || 0).toFixed(2)} лв.
+                  </div>
+                )}
                 {materialPrice > 0 && (
                   <div className="text-sm text-gray-600">
                     + {materialPrice.toFixed(2)} лв. за материал

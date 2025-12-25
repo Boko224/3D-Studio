@@ -11,10 +11,16 @@ const InventoryManagement = ({ selectedProductId }) => {
     productId: '',
     productName: '',
     basePrice: '',
+    weightGrams: '',
     stock: '',
     reorderLevel: '',
     category: '',
     colorStock: [], // Array of {color: string, stock: number}
+    promoActive: false,
+    promoType: 'percent',
+    promoValue: '',
+    promoStart: '',
+    promoEnd: '',
   });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -57,10 +63,16 @@ const InventoryManagement = ({ selectedProductId }) => {
       productId: '',
       productName: '',
       basePrice: '',
+      weightGrams: '',
       stock: '',
       reorderLevel: '',
       category: '',
       colorStock: [],
+      promoActive: false,
+      promoType: 'percent',
+      promoValue: '',
+      promoStart: '',
+      promoEnd: '',
     });
     setEditingId(null);
   };
@@ -71,10 +83,16 @@ const InventoryManagement = ({ selectedProductId }) => {
       productId: item.productId,
       productName: item.productName,
       basePrice: item.basePrice,
+      weightGrams: item.weightGrams || '',
       stock: item.stock,
       reorderLevel: item.reorderLevel,
       category: item.category,
       colorStock: item.colorStock || [],
+      promoActive: item.promoActive || false,
+      promoType: item.promoType || 'percent',
+      promoValue: item.promoValue ?? '',
+      promoStart: item.promoStart || '',
+      promoEnd: item.promoEnd || '',
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -102,10 +120,16 @@ const InventoryManagement = ({ selectedProductId }) => {
         productId: formData.productId,
         productName: formData.productName,
         basePrice: parseFloat(formData.basePrice),
+        weightGrams: parseInt(formData.weightGrams) || null,
         stock: totalStock,
         reorderLevel: parseInt(formData.reorderLevel) || 0,
         category: formData.category,
         colorStock: filteredColorStock,
+        promoActive: !!formData.promoActive,
+        promoType: formData.promoType || 'percent',
+        promoValue: parseFloat(formData.promoValue) || 0,
+        promoStart: formData.promoStart || '',
+        promoEnd: formData.promoEnd || '',
         updatedAt: new Date(),
       };
 
@@ -297,6 +321,18 @@ const InventoryManagement = ({ selectedProductId }) => {
             </div>
 
             <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Тегло (грамове)</label>
+              <input
+                type="number"
+                min="0"
+                value={formData.weightGrams}
+                onChange={(e) => setFormData({ ...formData, weightGrams: e.target.value })}
+                placeholder="напр. 120"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Ниво за преоредериране</label>
               <input
                 type="number"
@@ -363,6 +399,65 @@ const InventoryManagement = ({ selectedProductId }) => {
                   Няма добавени цветове. Кликни "Добави цвят" за да добавиш.
                 </div>
               )}
+            </div>
+
+            {/* Промоция */}
+            <div className="md:col-span-3">
+              <div className="flex justify-between items-center mb-3">
+                <label className="block text-sm font-semibold text-gray-700">🏷️ Промоция</label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!formData.promoActive}
+                    onChange={(e) => setFormData({ ...formData, promoActive: e.target.checked })}
+                  />
+                  Активна
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Тип</label>
+                  <select
+                    value={formData.promoType}
+                    onChange={(e) => setFormData({ ...formData, promoType: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="percent">Процент (%)</option>
+                    <option value="amount">Сума (лв.)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Стойност</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step={formData.promoType === 'percent' ? '1' : '0.01'}
+                    value={formData.promoValue}
+                    onChange={(e) => setFormData({ ...formData, promoValue: e.target.value })}
+                    placeholder={formData.promoType === 'percent' ? 'напр. 15' : 'напр. 5.00'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Начало</label>
+                  <input
+                    type="date"
+                    value={formData.promoStart}
+                    onChange={(e) => setFormData({ ...formData, promoStart: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Край</label>
+                  <input
+                    type="date"
+                    value={formData.promoEnd}
+                    onChange={(e) => setFormData({ ...formData, promoEnd: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Image upload removed as requested */}

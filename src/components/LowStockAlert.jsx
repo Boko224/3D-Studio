@@ -28,8 +28,14 @@ const LowStockAlert = ({ onRestock }) => {
     item.stock > 0 && item.stock <= (item.reorderLevel || 0)
   );
 
+  // Изчерпани цветове по продукти
+  const outOfStockColors = inventory.flatMap(item => {
+    const colors = (item.colorStock || []).filter(cs => (cs.stock || 0) <= 0);
+    return colors.map(cs => ({ productId: item.productId, productName: item.productName, color: cs.color, id: item.id }));
+  });
+
   // Не показвай банера ако няма проблеми или е затворен
-  if (!showBanner || (outOfStock.length === 0 && lowStock.length === 0)) {
+  if (!showBanner || (outOfStock.length === 0 && lowStock.length === 0 && outOfStockColors.length === 0)) {
     return null;
   }
 
@@ -137,6 +143,52 @@ const LowStockAlert = ({ onRestock }) => {
                   <p className="text-xs text-orange-600 italic">
                     ...и още {lowStock.length - 5} продукта
                   </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Изчерпани цветове */}
+      {outOfStockColors.length > 0 && (
+        <div className="bg-gray-50 border-l-4 border-gray-600 p-4 rounded-lg relative mt-4">
+          <button
+            onClick={() => setShowBanner(false)}
+            className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
+          >
+            <X size={20} />
+          </button>
+          <div className="flex items-start">
+            <AlertTriangle className="text-gray-600 mr-3 mt-1" size={24} />
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-gray-800 mb-2">
+                🎨 Изчерпани цветове ({outOfStockColors.length})
+              </h3>
+              <p className="text-sm text-gray-700 mb-3">
+                Следните цветови варианти са изчерпани:
+              </p>
+              <div className="space-y-2">
+                {outOfStockColors.slice(0, 8).map((entry, idx) => (
+                  <div key={`${entry.id}-${entry.color}-${idx}`} className="bg-white p-3 rounded border border-gray-200 flex justify-between items-center">
+                    <div>
+                      <span className="font-semibold text-gray-900">{entry.productName}</span>
+                      <span className="text-xs text-gray-500 ml-2">({entry.productId})</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-700 font-semibold text-sm">Цвят: {entry.color}</span>
+                      <button
+                        onClick={() => onRestock && onRestock(entry.id)}
+                        className="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1"
+                      >
+                        <RefreshCw size={14} />
+                        Презареди
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {outOfStockColors.length > 8 && (
+                  <p className="text-xs text-gray-600 italic">...и още {outOfStockColors.length - 8} цветови варианта</p>
                 )}
               </div>
             </div>

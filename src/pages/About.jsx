@@ -33,8 +33,8 @@ const About = () => {
                 От персонализирани ключодържатели до сложни механични части, имаме опит и качество да превърнем идеите ти в реалност.
               </p>
             </div>
-            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl p-12 h-96 flex items-center justify-center text-8xl">
-              🖨️
+            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl p-12 h-96 flex items-center justify-center">
+              <img src="/ChatGPT Image 21.12.2025 г., 15_20_34 (1).png" alt="3D Studio Logo" className="h-80 object-contain" />
             </div>
           </div>
 

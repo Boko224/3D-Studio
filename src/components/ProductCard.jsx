@@ -37,7 +37,15 @@ const ProductCard = ({ product }) => {
           <h3 className="text-lg font-bold text-gray-900 mb-2">{product.name}</h3>
           <p className="text-sm text-gray-600 mb-4 line-clamp-2">{product.description}</p>
           <div className="flex justify-between items-center">
-            <span className="text-2xl font-bold text-indigo-600">{product.basePrice.toFixed(2)} лв.</span>
+            {product.finalPrice !== undefined && product.finalPrice < (product.basePrice || 0) ? (
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold text-gray-500 line-through">{(product.basePrice || 0).toFixed(2)} лв.</span>
+                <span className="text-2xl font-bold text-indigo-600">{product.finalPrice.toFixed(2)} лв.</span>
+                <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">Промо</span>
+              </div>
+            ) : (
+              <span className="text-2xl font-bold text-indigo-600">{(product.basePrice || 0).toFixed(2)} лв.</span>
+            )}
             <span className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
               {product.category}
             </span>

@@ -19,7 +19,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center">
-            <span className="text-3xl mr-2">🖨️</span>
+            <img src="/ChatGPT Image 21.12.2025 г., 15_35_14 (1).png" alt="3D Studio Logo" className="h-14 -mr-3" />
             <span className="text-2xl font-bold text-indigo-600 hidden sm:inline">3D Studio</span>
           </Link>
 

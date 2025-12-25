@@ -14,7 +14,9 @@ export const CartProvider = ({ children }) => {
   const toggleMiniCart = () => setIsMiniCartOpen((prev) => !prev);
 
   const calculateLineTotal = (item, quantity) => {
-    const unitPrice = (item.basePrice || 0) + (item.materialPrice || 0);
+    const unitPrice = item.unitPrice !== undefined
+      ? item.unitPrice
+      : ((item.basePrice || 0) + (item.materialPrice || 0));
     return unitPrice * (quantity || 1);
   };
 
